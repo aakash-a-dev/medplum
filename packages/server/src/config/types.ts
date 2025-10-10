@@ -109,6 +109,14 @@ export interface MedplumServerConfig {
 
   /** @deprecated */
   auditEventLogStream?: string;
+
+  arrayColumnPadding?: { [searchParamCode: string]: ArrayColumnPaddingConfig };
+}
+
+export interface ArrayColumnPaddingConfig {
+  readonly m: number;
+  readonly lambda: number;
+  readonly statisticsTarget: number;
 }
 
 /**

@@ -9,6 +9,7 @@ import {
 } from '@medplum/core';
 import { Resource, ResourceType, SearchParameter } from '@medplum/fhirtypes';
 import { NIL, v5 } from 'uuid';
+import { ArrayColumnPaddingConfig } from '../config/types';
 import { getSearchParameterImplementation, TokenColumnSearchParameterImplementation } from './searchparameter';
 import { Column, Disjunction, Expression, Negation, SelectQuery, TypedCondition } from './sql';
 import { buildTokensForSearchParameter, shouldTokenExistForMissingOrPresent, Token } from './tokens';
@@ -22,7 +23,10 @@ export function buildTokenColumns(
   searchParam: SearchParameter,
   impl: TokenColumnSearchParameterImplementation,
   columns: Record<string, any>,
-  resource: Resource
+  resource: Resource,
+  options?: {
+    paddingConfig?: ArrayColumnPaddingConfig;
+  }
 ): void {
   const allTokens: Token[] = [];
   buildTokensForSearchParameter(allTokens, resource, searchParam, TEXT_SEARCH_SYSTEM);
@@ -108,6 +112,13 @@ export function buildTokenColumns(
         legacyTokens.add(code + DELIM + NULL_SYSTEM + DELIM + value);
         addHashedToken(tokens, prefix + NULL_SYSTEM + DELIM + value);
       }
+    }
+  }
+
+  if (options?.paddingConfig) {
+    const paddingElement = getPaddingElement(options.paddingConfig);
+    if (paddingElement) {
+      tokens.add(paddingElement);
     }
   }
 
@@ -464,4 +475,22 @@ export function escapeRegexString(str: string): string {
   // \ - escapes a special character
   // | - alternation (OR operator)
   return str.replace(/[.^$*+?()[\]{}\\|]/g, '\\$&');
+}
+
+// Not a v5 UUID, so will not collide with hashed token values
+const UUID_TEMPLATE = '00000000-0000-0000-0000-000000000000';
+
+export function getPaddingElement({ m, lambda, statisticsTarget }: ArrayColumnPaddingConfig): string | undefined {
+  if (Math.random() < (m * lambda) / (statisticsTarget * 300)) {
+    const randomIntStr = Math.floor(Math.random() * m).toString(); // random int in [0, m)
+
+    // more than 12 will interfere with the dashes in UUID_TEMPLATE. In practice,
+    // m will be <= 100 or maybe 1000 at the very high end, so this is just a sanity check.
+    if (randomIntStr.length > 12) {
+      throw new Error('Array padding m too large');
+    }
+    return UUID_TEMPLATE.substring(0, UUID_TEMPLATE.length - randomIntStr.length) + randomIntStr;
+  }
+
+  return undefined;
 }

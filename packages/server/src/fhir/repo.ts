@@ -1615,7 +1615,12 @@ export class Repository extends FhirRepository<PoolClient> implements Disposable
     let columnImpl: ColumnSearchParameterImplementation | undefined;
     if (impl.searchStrategy === 'token-column') {
       if (TokenColumnsFeature.write) {
-        buildTokenColumns(searchParam, impl, columns, resource);
+        const paddingConfig = getConfig().arrayColumnPadding?.[searchParam.code];
+        if (paddingConfig) {
+          buildTokenColumns(searchParam, impl, columns, resource, { paddingConfig });
+        } else {
+          buildTokenColumns(searchParam, impl, columns, resource);
+        }
       }
 
       if (isLegacyTokenColumnSearchParameter(searchParam, resource.resourceType)) {
