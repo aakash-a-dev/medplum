@@ -24,6 +24,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check if latest release
+        id: check-latest
+        uses: actions/github-script@v8
+        with:
+          result-encoding: string
+          script: |
+            const semver = require('semver');
+            const currentTag = context.ref.replace("refs/tags/", "");
+            const currentVersion = semver.clean(currentTag);
+
+            const latestRelease = await github.rest.repos.getLatestRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            const latestVersion = semver.clean(latestRelease.data.tag_name);
+
+            const isLatest = semver.gte(currentVersion, latestVersion);
+            console.log(`Current: ${currentVersion}, Latest: ${latestVersion}, IsLatest: ${isLatest}`);
+            return isLatest.toString();
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -67,6 +87,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Sync example repos
+        if: steps.check-latest.outputs.result == 'true'
         run: ./scripts/update-example-changes.sh "${{ secrets.SYNC_REPO_TOKEN }}"
 
       - name: Login to Docker Hub
@@ -79,7 +100,12 @@ jobs:
         uses: docker/setup-buildx-action@v2
 
       - name: Build and push server Docker image
-        run: ./scripts/build-docker-server.sh --release
+        run: |
+          if [ "${{ steps.check-latest.outputs.result }}" = "true" ]; then
+            ./scripts/build-docker-server.sh --release --skip-latest
+          else
+            ./scripts/build-docker-server.sh --release
+          fi
         env:
           SERVER_DOCKERHUB_REPOSITORY: ${{ secrets.DOCKERHUB_REPOSITORY }}
 
@@ -96,6 +122,7 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Deploy bot layer
+        if: steps.check-latest.outputs.result == 'true'
         run: ./scripts/deploy-bot-layer.sh
 
   build_agent_win64:
